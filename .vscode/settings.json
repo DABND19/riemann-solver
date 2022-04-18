@@ -1,0 +1,6 @@
+{
+  "files.associations": {
+    "riemann_problem.h": "c",
+    "gsl_roots.h": "c"
+  }
+}
