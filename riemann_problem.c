@@ -229,56 +229,6 @@ double right_wave_velocity(const RiemannProblemSolution* solution) {
   }
 }
 
-double left_rarefaction_trailing_edge_valocity(
-    const RiemannProblemSolution* solution) {
-  double c1 = speed_of_sound(&(solution->left));
-  double u1 = solution->left.velocity;
-  double U = contact_surface_velocity(solution);
-  double c1_star = c1 + G3 * (u1 - U);
-  return U - c1_star;
-}
-
-double right_rarefaction_trailing_edge_valocity(
-    const RiemannProblemSolution* solution) {
-  double c2 = speed_of_sound(&(solution->right));
-  double u2 = solution->right.velocity;
-  double U = contact_surface_velocity(solution);
-  double c2_star = c2 - G3 * (u2 - U);
-  return U + c2_star;
-}
-
-double left_contact_density(const RiemannProblemSolution* solution) {
-  double a1 = mass_velocity(solution->contact_pressure, &(solution->left));
-  double r1 = solution->left.density;
-  double u1 = solution->left.velocity;
-  double p1 = solution->left.pressure;
-  double U = contact_surface_velocity(solution);
-  double P = solution->contact_pressure;
-  if (P >= p1) {
-    return r1 * a1 / (a1 - r1 * (u1 - U));
-  } else {
-    double c1 = speed_of_sound(&(solution->left));
-    double c1_star = c1 + G3 * (u1 - U);
-    return GAMMA * P / (gsl_pow_2(c1_star));
-  }
-}
-
-double right_contact_density(const RiemannProblemSolution* solution) {
-  double a2 = mass_velocity(solution->contact_pressure, &(solution->right));
-  double r2 = solution->right.density;
-  double u2 = solution->right.velocity;
-  double p2 = solution->right.pressure;
-  double U = contact_surface_velocity(solution);
-  double P = solution->contact_pressure;
-  if (P >= p2) {
-    return r2 * a2 / (a2 - r2 * (u2 - U));
-  } else {
-    double c2 = speed_of_sound(&(solution->right));
-    double c2_star = c2 + G3 * (u2 - U);
-    return GAMMA * P / (gsl_pow_2(c2_star));
-  }
-}
-
 GasParameters rarefaction_wave_solution(const RiemannProblemSolution* solution,
                                         double curve, int direction) {
   GasParameters flow;
@@ -308,7 +258,12 @@ GasParameters rarefaction_wave_solution(const RiemannProblemSolution* solution,
   }
 
   c_star = 1 / G4 * c + direction * G5 * (curve - u);
-  U = c_star - direction * curve;
+
+  if (c_star <= 0) {
+    return (GasParameters){0, 0, NAN};
+  }
+
+  U = curve - direction * c_star;
   P = p * pow(c_star / c, 1 / G1);
   R = GAMMA * P / gsl_pow_2(c_star);
   return (GasParameters){P, R, U};
