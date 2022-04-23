@@ -126,74 +126,50 @@ RiemannProblemSolution solve_riemann_problem(const GasParameters* left,
   double contact_pressure;
   *error_code = GSL_SUCCESS;
 
-  struct EquationParameters equation_parameters = {left, right};
-  if (delta_U >= U_shock) {
-    gsl_function_fdf equation;
-    equation.f = &F;
-    equation.df = &dF;
-    equation.fdf = &FdF;
-    equation.params = &equation_parameters;
+  // Vacuum
+  if (gsl_fcmp(delta_U, U_vacuum, EPSILON) <= 0) {
+    return (RiemannProblemSolution){*left, *right, 0};
+  }
 
-    double contact_pressure_start = max_pressure;
-    contact_pressure = contact_pressure_start;
-
-    gsl_root_fdfsolver* solver =
-        gsl_root_fdfsolver_alloc(gsl_root_fdfsolver_newton);
-    gsl_root_fdfsolver_set(solver, &equation, contact_pressure_start);
-
-    *error_code = GSL_CONTINUE;
-    for (int iteration = 0;
-         iteration < MAX_ITERATIONS_COUNT && *error_code == GSL_CONTINUE;
-         ++iteration) {
-      *error_code = gsl_root_fdfsolver_iterate(solver);
-      if (*error_code != GSL_SUCCESS) {
-        break;
-      }
-
-      contact_pressure_start = contact_pressure;
-      contact_pressure = gsl_root_fdfsolver_root(solver);
-
-      *error_code = gsl_root_test_delta(contact_pressure,
-                                        contact_pressure_start, 0, EPSILON);
-    }
-    gsl_root_fdfsolver_free(solver);
-  } else if (delta_U > U_rarefaction) {
-    gsl_function equation;
-    equation.function = &F;
-    equation.params = &equation_parameters;
-
-    double contact_pressure_left = min_pressure;
-    double contact_pressure_right = max_pressure;
-
-    gsl_root_fsolver* solver =
-        gsl_root_fsolver_alloc(gsl_root_fsolver_bisection);
-    gsl_root_fsolver_set(solver, &equation, contact_pressure_left,
-                         contact_pressure_right);
-
-    *error_code = GSL_CONTINUE;
-    for (int iteration = 0;
-         iteration < MAX_ITERATIONS_COUNT && *error_code != GSL_SUCCESS;
-         ++iteration) {
-      *error_code = gsl_root_fsolver_iterate(solver);
-      if (*error_code != GSL_SUCCESS) {
-        break;
-      }
-
-      contact_pressure = gsl_root_fsolver_root(solver);
-      contact_pressure_left = gsl_root_fsolver_x_lower(solver);
-      contact_pressure_right = gsl_root_fsolver_x_upper(solver);
-
-      *error_code = gsl_root_test_interval(contact_pressure_left,
-                                           contact_pressure_right, 0, EPSILON);
-    }
-    gsl_root_fsolver_free(solver);
-  } else if (delta_U > U_vacuum) {
+  // Two rarefaction waves
+  if (gsl_fcmp(delta_U, U_rarefaction, EPSILON) <= 0) {
     contact_pressure =
         min_pressure *
         pow((delta_U - U_vacuum) / (U_rarefaction - U_vacuum), 1 / G1);
-  } else {
-    contact_pressure = 0;
+    return (RiemannProblemSolution){*left, *right, contact_pressure};
   }
+
+  struct EquationParameters equation_parameters = {left, right};
+  gsl_function_fdf equation;
+  equation.f = &F;
+  equation.df = &dF;
+  equation.fdf = &FdF;
+  equation.params = &equation_parameters;
+
+  double contact_pressure_start =
+      gsl_fcmp(delta_U, U_shock, EPSILON) >= 0 ? max_pressure : min_pressure;
+  contact_pressure = contact_pressure_start;
+
+  gsl_root_fdfsolver* solver =
+      gsl_root_fdfsolver_alloc(gsl_root_fdfsolver_newton);
+  gsl_root_fdfsolver_set(solver, &equation, contact_pressure_start);
+
+  *error_code = GSL_CONTINUE;
+  for (size_t iteration = 0;
+       iteration < MAX_ITERATIONS_COUNT && *error_code == GSL_CONTINUE;
+       ++iteration) {
+    *error_code = gsl_root_fdfsolver_iterate(solver);
+    if (*error_code != GSL_SUCCESS) {
+      break;
+    }
+
+    contact_pressure_start = contact_pressure;
+    contact_pressure = gsl_root_fdfsolver_root(solver);
+
+    *error_code = gsl_root_test_delta(contact_pressure, contact_pressure_start,
+                                      0, EPSILON);
+  }
+  gsl_root_fdfsolver_free(solver);
 
   return (RiemannProblemSolution){*left, *right, contact_pressure};
 }
@@ -257,13 +233,13 @@ GasParameters rarefaction_wave_solution(const RiemannProblemSolution* solution,
     return (GasParameters){P, R, U};
   }
 
-  c_star = 1 / G4 * c + direction * G5 * (curve - u);
+  c_star = 1 / G4 * c - direction * G5 * (u - curve);
 
   if (c_star <= 0) {
-    return (GasParameters){0, 0, NAN};
+    return (GasParameters){0, 0, 0};
   }
 
-  U = curve - direction * c_star;
+  U = c_star - direction * curve;
   P = p * pow(c_star / c, 1 / G1);
   R = GAMMA * P / gsl_pow_2(c_star);
   return (GasParameters){P, R, U};
