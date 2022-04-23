@@ -11,6 +11,8 @@ typedef struct __gas_parameters {
 } GasParameters;
 
 double speed_of_sound(const GasParameters* flow);
+double internal_energy(const GasParameters* flow);
+double total_energy(const GasParameters* flow);
 
 typedef struct __riemann_problem_solution {
   const GasParameters left;

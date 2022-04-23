@@ -9,6 +9,14 @@ double speed_of_sound(const GasParameters* gas) {
   return sqrt(GAMMA * gas->pressure / gas->density);
 }
 
+double internal_energy(const GasParameters* gas) {
+  return gas->pressure / ((GAMMA - 1.) * gas->density);
+}
+
+double total_energy(const GasParameters* gas) {
+  return internal_energy(gas) + 0.5 * gsl_pow_2(gas->velocity);
+}
+
 const double G1 = (GAMMA - 1) / (2 * GAMMA);
 const double G2 = (GAMMA + 1) / (2 * GAMMA);
 const double G3 = (GAMMA - 1) / 2;
@@ -27,7 +35,7 @@ double f(double contact_pressure, const GasParameters* flow) {
     double denominator = r * c * sqrt(G2 * pi + G1);
     return nominator / denominator;
   } else {
-    return 1 / G3 * c * (pow(pi, G1) - 1);
+    return 1 / G3 * c * (pow(pi, G1) - 1.);
   }
 }
 
@@ -39,8 +47,8 @@ double df(double contact_pressure, const GasParameters* flow) {
   double r = flow->density;
 
   if (P >= p) {
-    double nominator = (GAMMA + 1) * pi + (3 * GAMMA - 1);
-    double denominator = 4 * GAMMA * r * c * sqrt(gsl_pow_3(G2 * pi + G1));
+    double nominator = (GAMMA + 1.) * pi + (3. * GAMMA - 1.);
+    double denominator = 4. * GAMMA * r * c * sqrt(gsl_pow_3(G2 * pi + G1));
     return nominator / denominator;
   } else {
     return 1. / (GAMMA * P) * c * pow(pi, G1);
@@ -99,7 +107,7 @@ double mass_velocity(double contact_pressure, const GasParameters* flow) {
     return sqrt(r * (G4 * P + G3 * p));
   } else {
     double pi = P / p;
-    return G1 * r * c * (1 - pi) / (1 - pow(pi, G1));
+    return G1 * r * c * (1. - pi) / (1. - pow(pi, G1));
   }
 }
 
@@ -114,32 +122,42 @@ double contact_surface_velocity(const RiemannProblemSolution* solution) {
   return (a1 * u1 + a2 * u2 + p1 - p2) / (a1 + a2);
 }
 
-RiemannProblemSolution solve_riemann_problem(const GasParameters* left,
-                                             const GasParameters* right,
+RiemannProblemSolution solve_riemann_problem(const GasParameters* left_,
+                                             const GasParameters* right_,
                                              int* error_code) {
-  double max_pressure = gsl_max(left->pressure, right->pressure);
-  double min_pressure = gsl_min(left->pressure, right->pressure);
-  double U_shock = contact_pressure_equation(max_pressure, left, right);
-  double U_rarefaction = contact_pressure_equation(min_pressure, left, right);
-  double U_vacuum = contact_pressure_equation(0, left, right);
-  double delta_U = left->velocity - right->velocity;
+  GasParameters left;
+  GasParameters right;
+
+  if (left_->pressure < right_->pressure) {
+    left = *left_;
+    right = *right_;
+  } else {
+    left = *right_;
+    right = *left_;
+    left.velocity *= -1;
+    right.velocity *= -1;
+  }
+
+  double U_shock = contact_pressure_equation(right.pressure, &left, &right);
+  double U_rarefaction = contact_pressure_equation(left.pressure, &left, &right);
+  double U_vacuum = contact_pressure_equation(0, &left, &right);
+  double delta_U = left.velocity - right.velocity;
   double contact_pressure;
   *error_code = GSL_SUCCESS;
 
   // Vacuum
   if (gsl_fcmp(delta_U, U_vacuum, EPSILON) <= 0) {
-    return (RiemannProblemSolution){*left, *right, 0};
+    return (RiemannProblemSolution){*left_, *right_, 0};
   }
 
   // Two rarefaction waves
   if (gsl_fcmp(delta_U, U_rarefaction, EPSILON) <= 0) {
     contact_pressure =
-        min_pressure *
-        pow((delta_U - U_vacuum) / (U_rarefaction - U_vacuum), 1 / G1);
-    return (RiemannProblemSolution){*left, *right, contact_pressure};
+        left.pressure * pow((delta_U - U_vacuum) / (U_rarefaction - U_vacuum), 1 / G1);
+    return (RiemannProblemSolution){*left_, *right_, contact_pressure};
   }
 
-  struct EquationParameters equation_parameters = {left, right};
+  struct EquationParameters equation_parameters = {&left, &right};
   gsl_function_fdf equation;
   equation.f = &F;
   equation.df = &dF;
@@ -147,7 +165,7 @@ RiemannProblemSolution solve_riemann_problem(const GasParameters* left,
   equation.params = &equation_parameters;
 
   double contact_pressure_start =
-      gsl_fcmp(delta_U, U_shock, EPSILON) >= 0 ? max_pressure : min_pressure;
+      gsl_fcmp(delta_U, U_shock, EPSILON) >= 0 ? right.pressure : left.pressure;
   contact_pressure = contact_pressure_start;
 
   gsl_root_fdfsolver* solver =
@@ -171,7 +189,7 @@ RiemannProblemSolution solve_riemann_problem(const GasParameters* left,
   }
   gsl_root_fdfsolver_free(solver);
 
-  return (RiemannProblemSolution){*left, *right, contact_pressure};
+  return (RiemannProblemSolution){*left_, *right_, contact_pressure};
 }
 
 const int LEFT_DIRECTION = -1;
@@ -207,12 +225,7 @@ double right_wave_velocity(const RiemannProblemSolution* solution) {
 
 GasParameters rarefaction_wave_solution(const RiemannProblemSolution* solution,
                                         double curve, int direction) {
-  GasParameters flow;
-  if (direction == LEFT_DIRECTION) {
-    flow = solution->left;
-  } else {
-    flow = solution->right;
-  }
+  GasParameters flow = direction == LEFT_DIRECTION ? solution->left : solution->right;
 
   double P = solution->contact_pressure;
   double c = speed_of_sound(&flow);
@@ -247,12 +260,7 @@ GasParameters rarefaction_wave_solution(const RiemannProblemSolution* solution,
 
 GasParameters shock_wave_solution(const RiemannProblemSolution* solution,
                                   double curve, int direction) {
-  GasParameters flow;
-  if (direction == LEFT_DIRECTION) {
-    flow = solution->left;
-  } else {
-    flow = solution->right;
-  }
+  GasParameters flow = direction == LEFT_DIRECTION ? solution->left : solution->right;
 
   double P = solution->contact_pressure;
   double a = mass_velocity(P, &flow);
