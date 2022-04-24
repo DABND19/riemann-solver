@@ -6,14 +6,12 @@
 #include "riemann_problem.h"
 #include "godunov.h"
 
-// bool is_flow_equals(const GasFlow* left, const GasFlow* right) {
-//   int equals_velocity = !gsl_fcmp(left->velocity, right->velocity, EPSILON);
-//   int equals_density = !gsl_fcmp(left->density, right->density, EPSILON);
-//   int equals_pressure = !gsl_fcmp(left->pressure, right->pressure, EPSILON);
-//   return equals_velocity & equals_density & equals_pressure;
-// }
-
-static const double EPSILON = 1e-5;
+bool is_flow_equals(const GasFlow* left, const GasFlow* right) {
+  int equals_velocity = !gsl_fcmp(left->velocity, right->velocity, EPSILON);
+  int equals_density = !gsl_fcmp(left->density, right->density, EPSILON);
+  int equals_pressure = !gsl_fcmp(left->pressure, right->pressure, EPSILON);
+  return equals_velocity & equals_density & equals_pressure;
+}
 
 int main(int argc, char** argv) {
   if (argc != 8) {
@@ -25,9 +23,9 @@ int main(int argc, char** argv) {
   const GasFlow RIGHT = {atof(argv[4]), atof(argv[5]), atof(argv[6])};
   double T = atof(argv[7]);
 
-  // printf("Godunov %f %f %f %f %f %f %f\n", T,
-  //        LEFT.pressure, LEFT.density, LEFT.velocity,
-  //        RIGHT.pressure, RIGHT.density, RIGHT.velocity);
+  printf("Godunov %f %f %f %f %f %f %f\n", T,
+         LEFT.pressure, LEFT.density, LEFT.velocity,
+         RIGHT.pressure, RIGHT.density, RIGHT.velocity);
 
   const double X_LEFT = -1;
   const double X_RIGHT = 1;
@@ -54,7 +52,6 @@ int main(int argc, char** argv) {
   double* f3 = (double*)malloc(KNOTS_NUM * sizeof(double));
 
   double t = 0;
-  RiemannSolver* riemann_solver = riemann_solver_alloc();
   while (t < T) {
     GasFlow left_boundary_flow, right_boundary_flow;
 
@@ -68,41 +65,43 @@ int main(int argc, char** argv) {
     f2[KNOTS_NUM - 1] = F2(&right_boundary_flow);
     f3[KNOTS_NUM - 1] = F3(&right_boundary_flow);
 
-    double max_velocity = 0.;
+    double max_velocity = 0;
     for (size_t i = 0; i < CELLS_NUM - 1; ++i) {
       GasFlow left_flow = from_conservative(u1[i], u2[i], u3[i]);
       GasFlow right_flow = from_conservative(u1[i + 1], u2[i + 1], u3[i + 1]);
 
-      int error = riemann_solver_set(riemann_solver, &left_flow, &right_flow);
-      if (error) {
-        fprintf(stderr, "Riemann solver error:\n");
-        fprintf(stderr, "Left: %f\t%f\t%f\n", 
-                left_flow.pressure, left_flow.density, left_flow.velocity);
-        fprintf(stderr, "Right: %f\t%f\t%f\n", 
-                right_flow.pressure, right_flow.density, right_flow.velocity);
-        return 1;
+      GasFlow knot_flow;
+      double knot_velocity = 0;
+      if (is_flow_equals(&left_flow, &right_flow)) {
+        f1[i + 1] = F1(&left_flow);
+        f2[i + 1] = F2(&left_flow);
+        f3[i + 1] = F3(&left_flow);
+      } else {
+        int error;
+        RiemannProblemSolution exact_solution = solve_riemann_problem(&left_flow, &right_flow, &error);
+        if (error) {
+          fprintf(stderr, "Riemann problem solution error.\n");
+          break;
+        }
+
+        knot_flow = solution_on_curve(&exact_solution, knot_velocity);
+        f1[i + 1] = F1(&knot_flow);
+        f2[i + 1] = F2(&knot_flow);
+        f3[i + 1] = F3(&knot_flow);
+
+        max_velocity = gsl_max(max_velocity, -riemann_problem_left_wave_velocity(&exact_solution));
+        max_velocity = gsl_max(max_velocity, riemann_problem_right_wave_velocity(&exact_solution));
       }
-
-      double knot_velocity = 0.;
-      GasFlow knot_flow = riemann_problem_solution(riemann_solver, knot_velocity);
-      f1[i + 1] = F1(&knot_flow);
-      f2[i + 1] = F2(&knot_flow);
-      f3[i + 1] = F3(&knot_flow);
-
-      double S_l = riemann_problem_left_wave_velocity(riemann_solver);
-      double S_r = riemann_problem_right_wave_velocity(riemann_solver);
-      max_velocity = gsl_max(max_velocity, fabs(S_l));
-      max_velocity = gsl_max(max_velocity, fabs(S_r));
     }
 
     double dt = T - t;
     if (gsl_fcmp(max_velocity, 0., EPSILON) > 0) {
-      dt = gsl_min(dt, CFL * 0.5 * dx / max_velocity);
+      dt = gsl_min(dt, CFL * dx / max_velocity);
     }
 
     for (size_t i = 0; i < CELLS_NUM; ++i) {
-      double x_left = X_LEFT + dx * i;
-      double x_right = X_LEFT + dx * (i + 1);
+      double x_left = X_LEFT + i * dx;
+      double x_right = x_left + dx;
       u1[i] = calculus_schema(u1[i], f1[i], f1[i + 1], x_left, x_right, dt);
       u2[i] = calculus_schema(u2[i], f2[i], f2[i + 1], x_left, x_right, dt);
       u3[i] = calculus_schema(u3[i], f3[i], f3[i + 1], x_left, x_right, dt);
@@ -111,25 +110,16 @@ int main(int argc, char** argv) {
     t += dt;
   }
 
-  int error = riemann_solver_set(riemann_solver, &LEFT, &RIGHT);
-  if (error) {
-    fprintf(stderr, "Riemann solver error:\n");
-    fprintf(stderr, "Left: %f\t%f\t%f\n", 
-            LEFT.pressure, LEFT.density, LEFT.velocity);
-    fprintf(stderr, "Right: %f\t%f\t%f\n", 
-            RIGHT.pressure, RIGHT.density, RIGHT.velocity);
-    return 1;
-  }
+  int error;
+  RiemannProblemSolution exact = solve_riemann_problem(&LEFT, &RIGHT, &error);
   for (size_t i = 0; i < CELLS_NUM; ++i) {
     double x_left = X_LEFT + i * dx;
-    double x_right = X_LEFT + (i + 1) * dx;
-    double x = 0.5 * (x_left + x_right);
-    GasFlow solution = from_conservative(u1[i], u2[i], u3[i]);
-    GasFlow exact_solution = riemann_problem_solution(riemann_solver, x / T);
-    printf("%f\t%f\t%f\n", x, solution.density, exact_solution.density);
+    double x_right = x_left + dx;
+    GasFlow flow = from_conservative(u1[i], u2[i], u3[i]);
+    GasFlow flow_ = solution_on_curve(&exact, 0.5 * (x_left + x_right) / T);
+    printf("%f\t%f\t%f\n", 0.5 * (x_left + x_right), flow.density, flow_.density);
   }
 
-  riemann_solver_free(riemann_solver);
   free(u1);
   free(u2);
   free(u3);

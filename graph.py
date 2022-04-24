@@ -9,7 +9,7 @@ if __name__ == '__main__':
     y = np.array([], dtype=np.float64)
     z = np.array([], dtype=np.float64)
 
-    filename = '_'.join(next(sys.stdin).split())
+    # filename = '_'.join(next(sys.stdin).split())
 
     for line in sys.stdin:
         x_value, y_value, z_value = map(float, line.split())
@@ -21,4 +21,4 @@ if __name__ == '__main__':
 
     ax.plot(x, y)
     ax.plot(x, z)
-    plt.savefig(f'{filename}.jpg')
+    plt.savefig(f'fig.jpg')
