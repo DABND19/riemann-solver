@@ -45,8 +45,31 @@ GasFlow from_conservative(double u1, double u2, double u3) {
   return (GasFlow){pressure, density, velocity};
 }
 
-double calculus_schema(double u, double f_left, double f_right,
-                       double x_left, double x_right, double dt) {
+double flat_schema(double u, double f_left, double f_right,
+                   double x_left, double x_right, double dt) {
   double dx = x_right - x_left;
   return u - dt / dx * (f_right - f_left);
+}
+
+double b1(const GasFlow* flow) {
+  return 0.;
+}
+
+double b2(const GasFlow* flow) {
+  return flow->pressure;
+}
+
+double b3(const GasFlow* flow) {
+  return 0.;
+}
+
+double spherical_schema(double u, 
+                       double f_left, double f_right,
+                       double b, double B,
+                       double x_left, double x_right,
+                       double dt) {
+  double dx = x_right - x_left;
+  double df = f_right - f_right;
+  double x_mid = 0.5 * (x_left + x_right);
+  return u - dt / dx * df + 2. / x_mid * dt * (b - B);
 }
