@@ -69,7 +69,7 @@ double spherical_schema(double u,
                        double x_left, double x_right,
                        double dt) {
   double dx = x_right - x_left;
-  double df = f_right - f_right;
+  double df = f_right - f_left;
   double x_mid = 0.5 * (x_left + x_right);
   return u - dt / dx * df + 2. / x_mid * dt * (b - B);
 }
