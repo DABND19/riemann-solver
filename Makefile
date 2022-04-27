@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-Wall -I.
+CFLAGS=-Wall -I. -O2
 LIBS=-lm -lgsl
 
 all: main
