@@ -6,6 +6,8 @@
 #include <stdlib.h>
 
 #include <cmath>
+#include <sstream>
+#include <stdexcept>
 
 const double EPSILON = 1e-6;
 
@@ -212,6 +214,17 @@ void ExactSolver::calculateContactPressure() {
     }
   }
 
+  if (error) {
+    std::stringstream error_message;
+    error_message << "Failed to calculate pressure: \n";
+    error_message << "Left: " << this->left.getPressure() << '\t'
+                  << this->left.getDensity() << '\t' << this->left.getVelocity()
+                  << '\n';
+    error_message << "Right: " << this->right.getPressure() << '\t'
+                  << this->right.getDensity() << '\t'
+                  << this->right.getVelocity() << '\n';
+    throw std::runtime_error(error_message.str());
+  }
   this->p_contact = p;
 }
 

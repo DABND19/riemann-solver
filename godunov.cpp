@@ -10,14 +10,7 @@ ConservativeVariable cartesian_schema(const ConservativeVariable& u,
                                       double x_left, double x_right,
                                       double dt) noexcept {
   double dx = x_right - x_left;
-  auto [u1, u2, u3] = u;
-  auto [F1_left, F2_left, F3_left] = F_left;
-  auto [F1_right, F2_right, F3_right] = F_right;
-
-  u1 = u1 - dt / dx * (F1_right - F1_left);
-  u2 = u2 - dt / dx * (F2_right - F2_left);
-  u3 = u3 - dt / dx * (F3_right - F3_left);
-  return std::make_tuple(u1, u2, u3);
+  return u - dt / dx * (F_right - F_left);
 }
 
 ConservativeVariable spherical_schema(const ConservativeVariable& u,
@@ -29,19 +22,10 @@ ConservativeVariable spherical_schema(const ConservativeVariable& u,
   double x = 0.5 * (x_left + x_right);
 
   auto flow = from_conservative(u);
-  auto [Q1, Q2, Q3] = to_flux(flow);
-  double q1 = 0.;
-  double q2 = flow.getPressure();
-  double q3 = 0.;
+  auto Q = to_flux(flow);
+  auto q = std::make_tuple(0., flow.getPressure(), 0.);
 
-  auto [u1, u2, u3] = u;
-  auto [F1_left, F2_left, F3_left] = F_left;
-  auto [F1_right, F2_right, F3_right] = F_right;
-
-  u1 = u1 - dt / dx * (F1_right - F1_left) + 2. / x * dt * (q1 - Q1);
-  u2 = u2 - dt / dx * (F2_right - F2_left) + 2. / x * dt * (q2 - Q2);
-  u3 = u3 - dt / dx * (F3_right - F3_left) + 2. / x * dt * (q3 - Q3);
-  return std::make_tuple(u1, u2, u3);
+  return u - dt / dx * (F_right - F_left) + 2. / x * dt * (q - Q);
 }
 
 ConservativeVariable soft_bundary_condition(const ConservativeVariable& u, double t) noexcept {
