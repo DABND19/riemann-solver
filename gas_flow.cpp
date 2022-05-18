@@ -1,6 +1,6 @@
 #include "gas_flow.hpp"
 
-const double GasFlow::GAMMA = 5. / 3.;
+const double GasFlow::GAMMA = 1.4;
 
 GasFlow::GasFlow(double pressure, double density, double velocity) noexcept
     : pressure(pressure),

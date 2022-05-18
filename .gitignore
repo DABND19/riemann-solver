@@ -213,4 +213,5 @@ cython_debug/
 
 .vscode/
 main
+shu_osher
 pictures/

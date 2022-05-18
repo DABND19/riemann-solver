@@ -1,30 +1,15 @@
 #include "hllc.hpp"
 
-double HllcSolver::j_k(double r, double u, double S) noexcept {
-  return r * (u - S);
-}
+ConservativeVariable HllcSolver::U_c_k(const GasFlow& flow, double S_k,
+                                       double S_c_) noexcept {
+  double r_k = flow.getDensity();
+  double p_k = flow.getPressure();
+  double u_k = flow.getVelocity();
+  double E_k = flow.getTotalEnergy();
 
-double HllcSolver::S_c(double j_l, double j_r, double u_l, double u_r,
-                       double p_l, double p_r) noexcept {
-  double nominator = j_r * u_r - j_l * u_l + p_r - p_l;
-  double denominator = j_r - j_l;
-  return nominator / denominator;
-}
-
-double HllcSolver::p_c(double j_l, double j_r, double u_l, double u_r,
-                       double p_l, double p_r) noexcept {
-  double nominator = j_r * p_l - j_l * p_r - j_l * j_r * (u_r - u_l);
-  double denominator = j_r - j_l;
-  return nominator / denominator;
-}
-
-double HllcSolver::r_c_k(double r, double u, double S, double S_c) noexcept {
-  return r * (S - u) / (S - S_c);
-}
-
-double HllcSolver::e_c_k(double e, double p, double p_c, double r,
-                         double r_c) noexcept {
-  return e - 0.5 * (p + p_c) * (1. / r_c - 1. / r);
+  return r_k * (S_k - u_k) / (S_k - S_c_) *
+         std::make_tuple(
+             1., S_c_, E_k + (S_c_ - u_k) * (S_c_ + p_k / (r_k * (S_k - u_k))));
 }
 
 std::pair<double, double> HllcSolver::getWaveSpeed() const noexcept {
@@ -38,37 +23,46 @@ std::pair<double, double> HllcSolver::getWaveSpeed() const noexcept {
                         gsl_max(u_l, u_r) + gsl_max(c_l, c_r));
 }
 
-ConservativeVariable HllcSolver::getFlux() const noexcept {
+double HllcSolver::getContactVelocity() const noexcept {
   double p_l = this->left.getPressure();
   double r_l = this->left.getDensity();
   double u_l = this->left.getVelocity();
-  double e_l = this->right.getInternalEnergy();
 
   double p_r = this->right.getPressure();
   double r_r = this->right.getDensity();
   double u_r = this->right.getVelocity();
-  double e_r = this->right.getInternalEnergy();
 
-  double s = 0.;
   auto [S_l, S_r] = this->getWaveSpeed();
 
-  if (s <= S_l) {
-    return to_flux(this->left);
+  double nominator =
+      p_r - p_l + r_l * u_l * (S_l - u_l) - r_r * u_r * (S_r - u_r);
+  double denominator = r_l * (S_l - u_l) - r_r * (S_r - u_r);
+  return nominator / denominator;
+}
+
+ConservativeVariable HllcSolver::getFlux() const noexcept {
+  auto F_l = to_flux(this->left);
+  auto F_r = to_flux(this->right);
+
+  auto [S_l, S_r] = this->getWaveSpeed();
+  auto S_c = this->getContactVelocity();
+
+  if (0 <= S_l) {
+    return F_l;
   }
 
-  if (s >= S_r) {
-    return to_flux(this->right);
+  if (0 >= S_r) {
+    return F_r;
   }
 
-  double j_l = this->j_k(r_l, u_l, S_l);
-  double j_r = this->j_k(r_r, u_r, S_r);
-  double S_c = this->S_c(j_l, j_r, u_l, u_r, p_l, p_r);
-  double p_c = this->p_c(j_l, j_r, u_l, u_r, p_l, p_r);
+  auto U_l = to_conservative(this->left);
+  auto U_r = to_conservative(this->right);
+  auto U_c_l = this->U_c_k(this->left, S_l, S_c);
+  auto U_c_r = this->U_c_k(this->right, S_r, S_c);
 
-  double r_c = s >= S_c ? this->r_c_k(r_r, u_r, S_r, S_c)
-                        : this->r_c_k(r_l, u_l, S_l, S_c);
-  double e_c = s >= S_c ? this->e_c_k(e_r, p_r, p_c, r_r, r_c)
-                        : this->e_c_k(e_l, p_l, p_c, r_l, r_c);
-  return std::make_tuple(r_c * S_c, p_c + r_c * gsl_pow_2(S_c),
-                         r_c * (e_c + 0.5 * gsl_pow_2(S_c)) * S_c + p_c * S_c);
+  if (0 < S_c) {
+    return F_l + S_l * (U_c_l - U_l);
+  } else {
+    return F_r + S_r * (U_c_r - U_r);
+  }
 }

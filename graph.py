@@ -34,22 +34,22 @@ if __name__ == '__main__':
                                      figsize=(10, 8), dpi=200)
 
     ax1.plot(radius, pressure)
-    ax1.set_yscale('log')
+    # ax1.set_yscale('log')
     ax1.set_xlabel('Radius')
     ax1.set_ylabel('Pressure')
 
     ax2.plot(radius, density)
-    ax2.set_yscale('log')
+    # ax2.set_yscale('log')
     ax2.set_xlabel('Radius')
     ax2.set_ylabel('Density')
 
     ax3.plot(radius, velocity)
-    ax3.set_yscale('log')
+    # ax3.set_yscale('log')
     ax3.set_xlabel('Radius')
     ax3.set_ylabel('Velocity')
 
     ax4.plot(radius, mach_number)
-    ax4.set_yscale('log')
+    # ax4.set_yscale('log')
     ax4.set_xlabel('Radius')
     ax4.set_ylabel('Mach number')
 

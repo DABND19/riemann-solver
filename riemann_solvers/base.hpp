@@ -23,3 +23,12 @@ class RiemannSolver {
   virtual std::pair<double, double> getWaveSpeed() const noexcept = 0;
   virtual ConservativeVariable getFlux() const noexcept = 0;
 };
+
+ConservativeVariable operator+(const ConservativeVariable& left,
+                               const ConservativeVariable& right);
+ConservativeVariable operator-(const ConservativeVariable& left,
+                               const ConservativeVariable& right);
+ConservativeVariable operator-(const ConservativeVariable& value);
+ConservativeVariable operator*(double alpha, const ConservativeVariable& value);
+ConservativeVariable operator*(const ConservativeVariable& value, double alpha);
+ConservativeVariable operator/(const ConservativeVariable& value, double alpha);
