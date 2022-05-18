@@ -11,7 +11,6 @@
 #include "riemann_solvers/hll.hpp"
 #include "riemann_solvers/hllc.hpp"
 #include "riemann_solvers/exact.hpp"
-#include "stellar_wind.hpp"
 
 int main(int argc, char** argv) {
   if (argc != 2) {
