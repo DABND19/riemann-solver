@@ -1,24 +1,56 @@
 import sys
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 
 
 if __name__ == '__main__':
-    x = np.array([], dtype=np.float64)
-    y = np.array([], dtype=np.float64)
-    z = np.array([], dtype=np.float64)
+    pictures_dir = Path('pictures/')
 
-    # filename = '_'.join(next(sys.stdin).split())
+    try:
+        _, filename = sys.argv
+    except ValueError:
+        print('You must specify filename', 
+              file=sys.stderr)
+        exit(1)
+
+    radius = np.array([], dtype=np.float64)
+    pressure = np.array([], dtype=np.float64)
+    density = np.array([], dtype=np.float64)
+    velocity = np.array([], dtype=np.float64)
+    mach_number = np.array([], dtype=np.float64)
 
     for line in sys.stdin:
-        x_value, y_value, z_value = map(float, line.split())
-        x = np.append(x, x_value)
-        y = np.append(y, y_value)
-        z = np.append(z, z_value)
+        r, p, rho, u, m = map(float, line.split())
+        radius = np.append(radius, r)
+        pressure = np.append(pressure, p)
+        density = np.append(density, rho)
+        velocity = np.append(velocity, u)
+        mach_number = np.append(mach_number, m)
 
-    fig, ax = plt.subplots()
+    fig, ((ax1, ax2), 
+          (ax3, ax4)) = plt.subplots(nrows=2, ncols=2, 
+                                     figsize=(10, 8), dpi=200)
 
-    ax.plot(x, y)
-    ax.plot(x, z)
-    plt.savefig(f'fig.jpg')
+    ax1.plot(radius, pressure)
+    # ax1.set_yscale('log')
+    ax1.set_xlabel('Radius')
+    ax1.set_ylabel('Pressure')
+
+    ax2.plot(radius, density)
+    # ax2.set_yscale('log')
+    ax2.set_xlabel('Radius')
+    ax2.set_ylabel('Density')
+
+    ax3.plot(radius, velocity)
+    # ax3.set_yscale('log')
+    ax3.set_xlabel('Radius')
+    ax3.set_ylabel('Velocity')
+
+    ax4.plot(radius, mach_number)
+    # ax4.set_yscale('log')
+    ax4.set_xlabel('Radius')
+    ax4.set_ylabel('Mach number')
+
+    plt.savefig(pictures_dir.joinpath(filename))

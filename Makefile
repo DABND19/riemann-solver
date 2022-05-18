@@ -1,23 +1,41 @@
-CC=gcc
-CFLAGS=-Wall -I.
+CC=g++
+FLAGS=-std=c++17 -Wall -O2
 LIBS=-lm -lgsl
 
 all: main
 
-main: main.o riemann_problem.o godunov.o gas_flow.o
-	$(CC) $(CFLAGS) -o main gas_flow.o riemann_problem.o godunov.o main.o $(LIBS)
+main: main.o godunov.o hll.o hllc.o exact.o gas_flow.o base.o stellar_wind.o
+	$(CC) $(FLAGS) -o main main.o godunov.o hll.o hllc.o gas_flow.o base.o stellar_wind.o $(LIBS)
 
-main.o: gas_flow.h riemann_problem.h godunov.h main.c
-	$(CC) $(CFLAGS) -c main.c $(LIBS)
+shu_osher: shu_osher.o godunov.o hll.o hllc.o exact.o gas_flow.o base.o
+	$(CC) $(FLAGS) -o shu_osher shu_osher.o godunov.o hll.o hllc.o exact.o gas_flow.o base.o $(LIBS)
 
-godunov.o: gas_flow.h riemann_problem.h godunov.h godunov.c
-	$(CC) $(CFLAGS) -c godunov.c $(LIBS)
+main.o: gas_flow.hpp godunov.hpp riemann_solvers/hll.hpp riemann_solvers/hllc.hpp riemann_solvers/exact.hpp main.cpp stellar_wind.hpp
+	$(CC) $(FLAGS) -c main.cpp $(LIBS)
 
-riemann_problem.o: gas_flow.h riemann_problem.h riemann_problem.c
-	$(CC) $(CFLAGS) -c riemann_problem.c $(LIBS)
+shu_osher.o: gas_flow.hpp godunov.hpp riemann_solvers/hll.hpp riemann_solvers/hllc.hpp riemann_solvers/exact.hpp shu_osher.cpp
+	$(CC) $(FLAGS) -c shu_osher.cpp $(LIBS)
 
-gas_flow.o: gas_flow.h gas_flow.c
-	$(CC) $(CFLAGS) -c gas_flow.c $(LIBS)
+godunov.o: gas_flow.hpp godunov.hpp godunov.cpp
+	$(CC) $(FLAGS) -c godunov.cpp $(LIBS)
+
+exact.o: gas_flow.hpp riemann_solvers/base.hpp riemann_solvers/exact.hpp riemann_solvers/exact.cpp
+	$(CC) $(FLAGS) -c riemann_solvers/exact.cpp $(LIBS)
+
+hllc.o: gas_flow.hpp riemann_solvers/base.hpp riemann_solvers/hllc.hpp riemann_solvers/hllc.cpp
+	$(CC) $(FLAGS) -c riemann_solvers/hllc.cpp $(LIBS)
+
+hll.o: gas_flow.hpp riemann_solvers/base.hpp riemann_solvers/hll.hpp riemann_solvers/hll.cpp
+	$(CC) $(FLAGS) -c riemann_solvers/hll.cpp $(LIBS)
+
+base.o: riemann_solvers/base.hpp riemann_solvers/base.cpp
+	$(CC) $(FLAGS) -c riemann_solvers/base.cpp $(LIBS)
+
+stellar_wind.o: stellar_wind.hpp stellar_wind.cpp
+	$(CC) $(FLAGS) -c stellar_wind.cpp $(LIBS)
+
+gas_flow.o: gas_flow.hpp gas_flow.cpp
+	$(CC) $(FLAGS) -c gas_flow.cpp $(LIBS)
 
 clean:
-	rm -fr *.o main
+	rm -rf *.o main
