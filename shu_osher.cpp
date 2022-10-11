@@ -11,34 +11,31 @@
 #include "riemann_solvers/hll.hpp"
 #include "riemann_solvers/hllc.hpp"
 #include "riemann_solvers/exact.hpp"
+#include "utils.hpp"
 
 int main(int argc, char** argv) {
   if (argc != 2) {
     std::cerr << "You must specify 1 positional argument" << std::endl;
+    return 1;
   }
 
   const GasFlow LEFT = {10.3333, 3.857143, 2.629369};
   const double T = std::atof(argv[1]);
 
-  const size_t CELLS_COUNT = 10000;
+  const size_t CELLS_COUNT = 500;
   const double X_LEFT = 0, X_RIGHT = 1.;
-  std::vector<double> x_knots(CELLS_COUNT + 1);
-  for (size_t i = 0; i < CELLS_COUNT + 1; ++i) {
-    double dx = (X_RIGHT - X_LEFT) / CELLS_COUNT;
-    x_knots[i] = X_LEFT + dx * i;
-  }
-  std::vector<GasFlow> initial_flow(CELLS_COUNT);
-  for (size_t i = 0; i < CELLS_COUNT; ++i) {
-    double x = 0.5 * (x_knots[i + 1] + x_knots[i]);
-    if (x < 0.125) {
-      initial_flow[i] = LEFT;
-    } else {
-      initial_flow[i] = {1., 1. + 0.2 * std::sin(2. * M_PI * 8. * x), 0.};
-    }
-  }
 
   auto godunov = std::make_unique<GodunovMethod>(cartesian_schema);
-  godunov->setInitialConditions(x_knots, initial_flow);
+
+  auto knots = gen_mesh(X_LEFT, X_RIGHT, CELLS_COUNT + 1);
+  auto initial = gen_initial_state(knots, [LEFT](double x) {
+    if (x < 0.125) {
+      return LEFT;
+    } else {
+      return GasFlow(1., 1. + 0.2 * std::sin(16 * M_PI * x), 0.);
+    }
+  });
+  godunov->setInitialConditions(knots, initial);
 
   auto left_boundary_condition = [LEFT](const ConservativeVariable&, double t) {
     return to_conservative(LEFT);
@@ -46,8 +43,10 @@ int main(int argc, char** argv) {
   godunov->setLeftBoundaryCondition(left_boundary_condition);
   godunov->setRightBoundaryCondition(soft_bundary_condition);
 
-  auto riemann_solver = std::shared_ptr<RiemannSolver>(new ExactSolver());
-  godunov->setSolver(riemann_solver);
+  auto exact_solver = std::make_shared<ExactSolver>();
+  auto hll_solver = std::make_shared<HllSolver>();
+  auto hllc_solver = std::make_shared<HllcSolver>();
+  godunov->setSolver(std::static_pointer_cast<RiemannSolver>(hll_solver));
 
   godunov->run(T);
 
