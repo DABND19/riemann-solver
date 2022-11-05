@@ -67,6 +67,28 @@ double GodunovMethod::getCurrentTime() const noexcept {
   return this->t_current;
 }
 
+GasFlow left_approximation(const GasFlow& flow, double r_left, double r_right) {
+  if (flow.getMachNumber() < 1) {
+    return flow;
+  }
+  double r_mid = 0.5 * (r_left + r_right);
+  return GasFlow(
+    flow.getPressure() * std::pow(r_mid / r_right, 2. * GasFlow::GAMMA), 
+    flow.getDensity() * gsl_pow_2(r_mid / r_right), 
+    flow.getVelocity());
+}
+
+GasFlow right_approximation(const GasFlow& flow, double r_left, double r_right) {
+  if (flow.getMachNumber() < 1) {
+    return flow;
+  }
+  double r_mid = 0.5 * (r_left + r_right);
+  return GasFlow(
+    flow.getPressure() * std::pow(r_mid / r_left, 2. * GasFlow::GAMMA), 
+    flow.getDensity() * gsl_pow_2(r_mid / r_left), 
+    flow.getVelocity());
+}
+
 void GodunovMethod::calculateFluxes(double& dt) {
   for (size_t i = 0; i < this->F.size(); ++i) {
     auto left_cell = i > 0 
@@ -76,7 +98,16 @@ void GodunovMethod::calculateFluxes(double& dt) {
         ? u[i]
         : this->right_boundary_condition(u.back(), this->getCurrentTime());
 
-    this->solver->setState(from_conservative(left_cell), from_conservative(right_cell));
+    auto left_flow = i > 0
+        ? left_approximation(from_conservative(left_cell), this->x[i], this->x[i + 1])
+        : left_approximation(from_conservative(left_cell), 
+                             this->x[i] - 0.5 * (this->x[i + i] - this->x[i]), this->x[i]);
+    auto right_flow = i < this->u.size()
+        ? right_approximation(from_conservative(right_cell), this->x[i + 1], 
+                              this->x[i + 1] + 0.5 * (this->x[i + 1] - this->x[i]))
+        : from_conservative(right_cell);
+
+    this->solver->setState(left_flow, right_flow);
     this->F[i] = solver->getFlux();
 
     auto [left_wave, right_wave] = solver->getWaveSpeed();

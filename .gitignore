@@ -215,3 +215,4 @@ cython_debug/
 main
 shu_osher
 pictures/
+data/
